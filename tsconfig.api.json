@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "types": ["node"],
+    "esModuleInterop": true
+  },
+  "include": ["server.ts", "api/**/*.ts", "shared/**/*.ts", "bibleService.ts", "tests/**/*.ts"]
+}

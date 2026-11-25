@@ -1,0 +1,18 @@
+project_id = "meditate-on-the-word"
+[api]
+enabled = true
+port = 54321
+[db]
+port = 54322
+major_version = 17
+[auth]
+enabled = true
+site_url = "meditateword://auth/callback"
+additional_redirect_urls = ["meditateword://auth/callback", "meditateword://auth/callback?intent=recovery"]
+enable_signup = true
+enable_anonymous_sign_ins = false
+minimum_password_length = 8
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+double_confirm_changes = true

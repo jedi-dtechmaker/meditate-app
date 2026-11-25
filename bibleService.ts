@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { TRANSLATIONS } from './shared/domain.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,7 +25,7 @@ export const BIBLE_TRANSLATIONS: BibleTranslationMeta[] = [
   { id: 'NASB', shortName: 'NASB', fullName: 'New American Standard Bible (1995)', featured: true, source: 'bolls', description: 'Word-for-word precision' },
   { id: 'AMP', shortName: 'AMP', fullName: 'Amplified Bible', featured: true, source: 'bolls', description: 'Expanded meanings & nuance' },
   { id: 'CSB17', shortName: 'CSB', fullName: 'Christian Standard Bible', featured: true, source: 'bolls', description: 'Optimal equivalence, clear & faithful' },
-  { id: 'WEB', shortName: 'WEB', fullName: 'World English Bible', featured: true, source: 'bolls', description: 'Modern public domain English' },
+  { id: 'WEB', shortName: 'WEB', fullName: 'World English Bible', featured: true, source: 'local', description: 'Modern public domain English' },
   { id: 'BSB', shortName: 'BSB', fullName: 'Berean Standard Bible', featured: true, source: 'bolls', description: 'Clean, smooth contemporary English' },
   { id: 'NET', shortName: 'NET', fullName: 'New English Translation', featured: true, source: 'bolls', description: 'Scholarly modern English' },
   { id: 'BBE', shortName: 'BBE', fullName: 'Bible in Basic English', featured: true, source: 'local', description: 'Simple, accessible English' },
@@ -33,13 +34,13 @@ export const BIBLE_TRANSLATIONS: BibleTranslationMeta[] = [
   { id: 'CEB', shortName: 'CEB', fullName: 'Common English Bible', source: 'bolls', description: 'Natural, readable phrasing' },
   { id: 'GNTD', shortName: 'GNT', fullName: 'Good News Translation (US)', source: 'bolls', description: 'Clear thought-for-thought English' },
   { id: 'ERV', shortName: 'ERV', fullName: 'Easy-to-Read Version', source: 'bolls', description: 'Simple, clear modern wording' },
-  { id: 'ASV', shortName: 'ASV', fullName: 'American Standard Version (1901)', source: 'bolls', description: 'Classic literal heritage' },
+  { id: 'ASV', shortName: 'ASV', fullName: 'American Standard Version (1901)', source: 'local', description: 'Classic literal heritage' },
   { id: 'RSV', shortName: 'RSV', fullName: 'Revised Standard Version (1952)', source: 'bolls', description: 'Formal literary English' },
   { id: 'LSB', shortName: 'LSB', fullName: 'Legacy Standard Bible', source: 'bolls', description: 'Literal update to NASB 1995' },
   { id: 'MEV', shortName: 'MEV', fullName: 'Modern English Version', source: 'bolls', description: 'Updated King James tradition' },
   { id: 'CEVD', shortName: 'CEV', fullName: 'Contemporary English Version', source: 'bolls', description: 'Easy-to-read aloud' },
   { id: 'ISV', shortName: 'ISV', fullName: 'International Standard Version', source: 'bolls', description: 'Modern scholarly translation' },
-  { id: 'YLT', shortName: 'YLT', fullName: "Young's Literal Translation", source: 'bolls', description: 'Strictly literal word order' },
+  { id: 'YLT', shortName: 'YLT', fullName: "Young's Literal Translation", source: 'local', description: 'Strictly literal word order' },
   { id: 'CJB', shortName: 'CJB', fullName: 'Complete Jewish Bible', source: 'bolls', description: 'Messianic Jewish context' },
   { id: 'TLV', shortName: 'TLV', fullName: 'Tree of Life Version', source: 'bolls', description: 'Jewish roots & English flow' },
   { id: 'NRSVCE', shortName: 'NRSV', fullName: 'New Revised Standard Version (CE)', source: 'bolls', description: 'Academic & ecumenical standard' },
@@ -93,11 +94,13 @@ const SCENIC_VERSE_IMAGES = [
   'https://images.unsplash.com/photo-1518495973542-4542c06a5843?auto=format&fit=crop&w=1200&q=80',
 ];
 
-const localBibleCache: Partial<Record<'kjv' | 'bbe', RawBibleBook[]>> = {};
+const localBibleCache: Partial<Record<LocalBibleKey, RawBibleBook[]>> = {};
 // Cache remote Bolls chapters: key = `${translation}:${bookNum}:${chapter}` -> string[] (1-indexed verses mapped to 0-indexed array)
 const remoteChapterCache = new Map<string, string[]>();
 
-function loadLocalBible(translation: 'kjv' | 'bbe'): RawBibleBook[] {
+type LocalBibleKey = 'kjv' | 'bbe' | 'web' | 'asv' | 'ylt';
+
+function loadLocalBible(translation: LocalBibleKey): RawBibleBook[] {
   if (localBibleCache[translation]) return localBibleCache[translation]!;
   const filePath = path.join(__dirname, 'data', 'bible', `${translation}.json`);
   const raw = fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '');
@@ -418,7 +421,7 @@ async function fetchChapterTexts(
   meta: BibleTranslationMeta
 ): Promise<string[] | null> {
   if (meta.source === 'local') {
-    const key = meta.id.toLowerCase() as 'kjv' | 'bbe';
+    const key = meta.id.toLowerCase() as LocalBibleKey;
     const books = loadLocalBible(key);
     const ch = books[bookIndex]?.chapters[chapterNum - 1];
     return ch ? ch.map((t) => cleanBibleText(t)) : null;
@@ -449,7 +452,11 @@ async function fetchChapterTexts(
 
   // Build ordered verse array
   const sorted = [...rows].sort((a, b) => (a.verse || 0) - (b.verse || 0));
-  const texts = sorted.map((r) => cleanBibleText(r.text || ''));
+  const texts: string[] = [];
+  for (const row of sorted) {
+    if (row.verse && row.verse > 0) texts[row.verse - 1] = cleanBibleText(row.text || '');
+  }
+  for (let index = 0; index < texts.length; index++) texts[index] ||= '';
 
   // Prevent unbounded cache growth
   if (remoteChapterCache.size > 400) {
@@ -484,7 +491,7 @@ export async function getBibleChapter(
     translation: meta.id,
     translationShortName: meta.shortName,
     translationName: meta.fullName,
-    verses: texts.map((text, idx) => ({
+    verses: texts.flatMap((text, idx) => text.trim() ? [{
       verse: idx + 1,
       text,
       normalized: buildNormalizedVerse(
@@ -495,7 +502,7 @@ export async function getBibleChapter(
         text,
         meta.shortName
       ),
-    })),
+    }] : []),
   };
 }
 
@@ -550,78 +557,47 @@ export async function searchFullBible(
         const chapterArr = await fetchChapterTexts(bookIndex, chapterNum, meta);
         if (chapterArr && chapterArr.length > 0) {
           if (verseStart !== undefined) {
-            const startIdx = Math.max(1, Math.min(verseStart, chapterArr.length));
-            const endIdx = verseEnd
-              ? Math.max(startIdx, Math.min(verseEnd, chapterArr.length))
-              : startIdx;
-
-            const sliceText = chapterArr.slice(startIdx - 1, endIdx).join(' ');
-            const primaryVerse = buildNormalizedVerse(
-              bookMeta.name,
-              chapterNum,
-              startIdx,
-              endIdx > startIdx ? endIdx : null,
-              sliceText,
-              meta.shortName
-            );
-
-            const individualMatches = chapterArr
-              .slice(startIdx - 1, endIdx)
-              .map((t, i) =>
-                buildNormalizedVerse(
-                  bookMeta.name,
-                  chapterNum,
-                  startIdx + i,
-                  null,
-                  t,
-                  meta.shortName
-                )
-              );
-
+            const startIdx = verseStart;
+            const endIdx = verseEnd ?? startIdx;
+            const entries = chapterArr
+              .map((text, index) => ({ text, number: index + 1 }))
+              .filter(({ text, number }) => number >= startIdx && number <= endIdx && text.trim());
+            if (entries.length === 0) {
+              return { found: false, mode: 'reference' as const, translation: meta.id,
+                translationName: meta.fullName, unavailable: endIdx >= startIdx && (
+                  startIdx <= chapterArr.length || TRANSLATIONS.some((candidate) => {
+                    const otherChapter = loadLocalBible(candidate.toLowerCase() as LocalBibleKey)[bookIndex]?.chapters[chapterNum - 1];
+                    return Boolean(otherChapter?.[startIdx - 1]?.trim());
+                  })),
+                totalMatches: 0, matches: [] };
+            }
+            const primaryVerse = buildNormalizedVerse(bookMeta.name, chapterNum, entries[0].number,
+              entries.length > 1 ? entries[entries.length - 1].number : null,
+              entries.map(({ text }) => text).join(' '), meta.shortName);
+            const individualMatches = entries.map(({ text, number }) =>
+              buildNormalizedVerse(bookMeta.name, chapterNum, number, null, text, meta.shortName));
             return {
-              found: true,
-              mode: 'reference' as const,
-              translation: meta.id,
-              translationName: meta.fullName,
-              totalMatches: individualMatches.length,
-              verse: primaryVerse,
-              matches: individualMatches,
+              found: true, mode: 'reference' as const, translation: meta.id,
+              translationName: meta.fullName, totalMatches: individualMatches.length,
+              verse: primaryVerse, matches: individualMatches,
             };
           }
 
-          // Chapter-only query
-          const previewEnd = Math.min(3, chapterArr.length);
-          const previewQuote = chapterArr.slice(0, previewEnd).join(' ');
-          const chapterOverview = buildNormalizedVerse(
-            bookMeta.name,
-            chapterNum,
-            1,
-            previewEnd > 1 ? previewEnd : null,
-            previewQuote,
-            meta.shortName
-          );
-
-          const chapterMatches = chapterArr
-            .slice(0, limit)
-            .map((t, i) =>
-              buildNormalizedVerse(
-                bookMeta.name,
-                chapterNum,
-                i + 1,
-                null,
-                t,
-                meta.shortName
-              )
-            );
-
+          // Keep original verse numbers when a translation omits a verse.
+          const available = chapterArr.map((text, index) => ({ text, number: index + 1 }))
+            .filter(({ text }) => text.trim());
+          const preview = available.slice(0, 3);
+          const chapterOverview = preview.length ? buildNormalizedVerse(
+            bookMeta.name, chapterNum, preview[0].number,
+            preview.length > 1 ? preview[preview.length - 1].number : null,
+            preview.map(({ text }) => text).join(' '), meta.shortName
+          ) : undefined;
+          const chapterMatches = available.slice(0, limit).map(({ text, number }) =>
+            buildNormalizedVerse(bookMeta.name, chapterNum, number, null, text, meta.shortName));
           return {
-            found: true,
-            mode: 'chapter' as const,
-            translation: meta.id,
-            translationName: meta.fullName,
-            totalMatches: chapterArr.length,
-            verse: chapterOverview,
-            matches: chapterMatches,
+            found: available.length > 0, mode: 'chapter' as const, translation: meta.id,
+            translationName: meta.fullName, totalMatches: available.length,
+            verse: chapterOverview, matches: chapterMatches,
           };
         }
       }
@@ -635,17 +611,10 @@ export async function searchFullBible(
     const ch1 = await fetchChapterTexts(bookOnlyIndex, 1, meta);
     if (ch1 && ch1.length > 0) {
       const matches = ch1
+        .map((text, index) => ({ text, number: index + 1 }))
+        .filter(({ text }) => text.trim())
         .slice(0, 15)
-        .map((t, i) =>
-          buildNormalizedVerse(
-            bookMeta.name,
-            1,
-            i + 1,
-            null,
-            t,
-            meta.shortName
-          )
-        );
+        .map(({ text, number }) => buildNormalizedVerse(bookMeta.name, 1, number, null, text, meta.shortName));
       return {
         found: matches.length > 0,
         mode: 'book' as const,
@@ -711,8 +680,14 @@ export async function searchFullBible(
     }
   }
 
-  // Local keyword search (KJV / BBE)
-  const localKey = meta.id.toLowerCase() === 'bbe' ? 'bbe' : 'kjv';
+  // Never substitute KJV text while keeping a remote translation's label.
+  if (meta.source === 'bolls') {
+    return { found: false, mode: 'keyword' as const, translation: meta.id,
+      translationName: meta.fullName, totalMatches: 0, matches: [] };
+  }
+
+  // Local keyword search
+  const localKey = meta.id.toLowerCase() as LocalBibleKey;
   const localBooks = loadLocalBible(localKey);
   const lowerQuery = query.toLowerCase();
   const tokens = lowerQuery.split(/\s+/).filter(Boolean);

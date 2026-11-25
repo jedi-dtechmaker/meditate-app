@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: meditate-word-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TRUST_PROXY
+        value: '1'
